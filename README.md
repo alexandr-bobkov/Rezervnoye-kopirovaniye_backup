@@ -91,11 +91,14 @@ else
     logger "Backup failed: $SOURCE_DIR to $TARGET_DIR"
 fi
 ```
+
 ### 2. Настройка прав и планировщика cron
+
 Чтобы скрипт запускался ежедневно в 03:00, необходимо выполнить следующее:
 
-    chmod +x backup.sh (сделать исполняемым).
-    crontab -e и добавьте строку:
+1. `chmod +x backup.sh` (сделать исполняемым).
+2. `crontab -e` и добавьте строку:
+
 ```config
 0 3 * * * /bin/bash /home/$(whoami)/backup.sh
 ```
@@ -111,7 +114,7 @@ fi
 ```config
 journalctl | grep "Backup" | tail -n 5
 ```
-<summary>Просмотр логов через journalctl</summary>
+<summary>Просмотр содержимого `/tmp` и логов через journalctl</summary>
 <img src="img/4.jpg" width = 100%>
 
 
