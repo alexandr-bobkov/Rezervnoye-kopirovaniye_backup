@@ -100,6 +100,24 @@ fi
 0 3 * * * /bin/bash /home/$(whoami)/backup.sh
 ```
 
+### 3. Проверка работоспособности
+
+- Для проверки поставил в cron выполнение каждую минуту
+<summary>Настройка cron</summary>
+<img src="img/3.jpg" width = 100%>
+
+- Для просмотра лога журналов через journalctl в консоли:
+
+```config
+journalctl | grep "Backup" | tail -n 5
+```
+<summary>Просмотр логов через journalctl</summary>
+<img src="img/4.jpg" width = 100%>
+
+
+
+
+
 
 
 
