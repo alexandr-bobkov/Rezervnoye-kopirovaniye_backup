@@ -29,81 +29,8 @@ rsync -av --delete --checksum --exclude='.*/' ~/ /tmp/backup/
 
 * Добавим файл `test.txt`  и повторим создание backup
 
-<summary>Результат проверки добавление нового созданного файла в backup</summary>
+<summary>Результат проверки добавления нового созданного файла в backup</summary>
 <img src="img/2.jpg" width = 100%>
-
-
-
-
-
-
-## 1. Запуск Python-серверов
-Для имитации двух бэкенд-серверов были созданы две директории с уникальными файлами `index.html`. Серверы запущены на портах 8001 и 8002.
-
-**Команды запуска:**
-```bash
-# Подготовка файлов на сервере s1 (192.168.32.129) и s2 (192.168.32.130)
-#### На сервере s1
-mkdir -p /home/user/s1
-#### На сервере s2
-mkdir -p /home/user/s2
-#### На сервере s1
-echo "<h1>HELLO FROM SERVER 1</h1>" > /home/user/s1/index.html
-#### На сервере s2
-echo "<h1>HELLO FROM SERVER 2</h1>" > /home/user/s2/index.html
-
-# Запуск серверов в фоновом режиме
-#### На сервере s1
-cd /home/user/s1 && python3 -m http.server 8001 --bind 0.0.0.0 &
-#### На сервере s2
-cd /home/user/s2 && python3 -m http.server 8002 --bind 0.0.0.0 &
-```
-#### 2. Конфигурационный файл haproxy (/etc/haproxy/haproxy.cfg) был отредактирован (добавлены параметры)  для работы на 4 уровне (TCP) с использованием алгоритма Round-robin. Балансировщик принимает запросы на порту 8888 (так как порт 80 занят Nginx).
-* **Proxy сервер развернут на 192.168.32.129 где и запущен один из python серверов (на s1)**
-
-```conf
-# Описываем входную точку, куда будут приходить запросы от пользователя
-frontend main_frontend
-    # Слушать на всех интерфейсах (IP) на стандартном 80-м порту
-    bind *:8888
-    # Работа на 4-м уровне (TCP), как указано в задании
-    mode tcp
-    # Указываем, какой группе серверов передавать трафик
-    default_backend python_servers
-
-# Описываем группу серверов, между которыми будем балансировать
-backend python_servers
-    # Режим работы (должен совпадать с frontend)
-    mode tcp
-    # Алгоритм балансировки: по очереди (первый, второй, первый, второй...)
-    balance roundrobin
-    # Первый сервер (на IP и порту 8001) с проверкой доступности
-    server server1 192.168.32.129:8001 check #check -отслеживает жив ли сервер
-    # Второй сервер (на IP и порту 8002) с проверкой доступности
-    server server2 192.168.32.130:8002 check #check -отслеживает жив ли сервер
-```
-#### Запустим проверку 
-```bash 
-for i in {1..4}; do curl http://192.168.32.129:8888; done
-``` 
-
-<summary>Результат проверки на скриншоте</summary>
-<img src="img/2.jpg" width = 100%>
-
-<details>
-<summary>Для себя отсылка к заданию с keepalived</summary>
-
-## Как работает эта связка c keepalived:
-
-1. Мониторинг: Keepalived на «Мастере» постоянно проверяет (актуально если 2 и более сервера с HAProxy): «Работает ли мой локальный HAProxy?».
-2. Реакция: Если скрипт возвращает ошибку (HAProxy упал), Keepalived понимает, что этот сервер больше не годен для работы.
-3. Переезд IP: Он передает  Virtual IP второму серверу (Backup) c HAProxy.
-4. Результат: Пользователи продолжают заходить на тот же IP, но попадают уже на второй HAProxy, который «живой».
-- **У HAProxy и Keepalived  разные специализации:**
-- Keepalived — это «грубый» инструмент. Он умеет только переключать IP-адрес с одной машины на другую (Failover). Он не умеет балансировать трафик между 10 разными серверами одновременно.
-- HAProxy — это «тонкий» инструмент. Он умеет анализировать трафик, разделять его по весам, следить за сессиями пользователей и балансировать нагрузку (Load Balancing).
-
-</details>
 
 </details>
 
@@ -114,128 +41,70 @@ for i in {1..4}; do curl http://192.168.32.129:8888; done
 <details>
 <summary><b>Задание 2</b></summary>
 
-- Запустите три simple python сервера на своей виртуальной машине на разных портах
-- Настройте балансировку Weighted Round Robin на 7 уровне, чтобы первый сервер имел вес 2, второй - 3, а третий - 4
-- HAproxy должен балансировать только тот http-трафик, который адресован домену example.local
-- На проверку направьте конфигурационный файл haproxy, скриншоты, где видно перенаправление запросов на разные серверы при обращении к HAProxy c использованием домена example.local и без него.
-
+- Написать скрипт и настроить задачу на регулярное резервное копирование домашней директории пользователя с помощью rsync и cron.
+- Резервная копия должна быть полностью зеркальной
+- Резервная копия должна создаваться раз в день, в системном логе должна появляться запись об успешном или неуспешном выполнении операции
+- Резервная копия размещается локально, в директории `/tmp/backup`
+- На проверку направить файл crontab и скриншот с результатом работы утилиты.
 ------
 
 ### ОТВЕТ:
+### 1. Создание «умного» скрипта резервного копирования
+Скрипт поддерживает два режима: интерактивный (запрашивает пути у пользователя) и автоматический (использует значения по умолчанию для cron).
 
-## 1. Запуск Python-серверов
-Для имитации трех бэкенд-серверов были созданы директории с уникальными файлами `index.html`. Серверы запущены на портах > ```8002```
-
-**Команды запуска:**
 ```bash
-# Подготовка файлов на сервере s1 (192.168.32.129) и s2 (192.168.32.130) и s3 (192.168.32.128)
-#### На сервере s1
-mkdir -p /home/user/s1
-#### На сервере s2
-mkdir -p /home/user/s2
-#### На сервере s3
-mkdir -p /home/user/s3
-#### На сервере s1
-echo "<h1>SERVER 1 (Weight 2)</h1>" > /home/user/s1/index.html
-#### На сервере s2
-echo "<h1>SERVER 2 (Weight 3)</h1>" > /home/user/s2/index.html
-#### На сервере s3
-echo "<h1>SERVER 3 (Weight 4)</h1>" > /home/user/s3/index.html
-# Запуск серверов в фоновом режиме
-#### На сервере s1
-cd /home/user/s1 && python3 -m http.server 8002 --bind 0.0.0.0 &
-#### На сервере s2
-cd /home/user/s2 && python3 -m http.server 8002 --bind 0.0.0.0 &
-#### На сервере s3
-cd /home/user/s3 && python3 -m http.server 8002 --bind 0.0.0.0 &
+#!/bin/bash
+
+# Настройки по умолчанию (для работы через cron)
+DEFAULT_SOURCE="$HOME/"
+DEFAULT_TARGET="/tmp/backup"
+
+# Проверяем, запущен ли скрипт в интерактивном режиме (есть ли терминал)
+if [ -t 0 ]; then
+    # Режим ручного запуска: спрашиваем пользователя
+    echo "--- Интерактивный режим резервного копирования ---"
+    
+    read -p "Источник [$DEFAULT_SOURCE]: " SOURCE_DIR
+    SOURCE_DIR=${SOURCE_DIR:-$DEFAULT_SOURCE} # Если нажать Enter, возьмет значение по умолчанию
+    
+    read -p "Назначение [$DEFAULT_TARGET]: " TARGET_DIR
+    TARGET_DIR=${TARGET_DIR:-$DEFAULT_TARGET}
+else
+    # Режим cron: используем настройки по умолчанию без вопросов
+    SOURCE_DIR=$DEFAULT_SOURCE
+    TARGET_DIR=$DEFAULT_TARGET
+fi
+
+# Проверка источника
+if [ ! -d "$SOURCE_DIR" ]; then
+    logger "Backup error: Directory $SOURCE_DIR not found"
+    exit 1
+fi
+
+# Создание папки назначения
+mkdir -p "$TARGET_DIR"
+
+# Запуск зеркалирования
+if rsync -av --delete --checksum --exclude='.*/' "$SOURCE_DIR" "$TARGET_DIR"; then
+    logger "Backup successful: $SOURCE_DIR to $TARGET_DIR"
+else
+    logger "Backup failed: $SOURCE_DIR to $TARGET_DIR"
+fi
+```
+### 2. Настройка прав и планировщика cron
+Чтобы скрипт запускался ежедневно в 03:00, необходимо выполнить следующее:
+
+    chmod +x backup.sh (сделать исполняемым).
+    crontab -e и добавьте строку:
+```config
+0 3 * * * /bin/bash /home/$(whoami)/backup.sh
 ```
 
-#### 2. Конфигурационный файл haproxy (/etc/haproxy/haproxy.cfg) был отредактирован (добавлены параметры)  для работы c ACL и весом>
-* **Proxy сервер развернут на 192.168.32.129 где и запущен один из python серверов (на s1)**
-```conf
-# --- Секция FRONTEND (Прием запросов) ---
-frontend http_frontend
-    # Слушаем на порту 8888 (так как 80 занят nginx)
-    bind *:8888
-    # Указываем 7-й уровень (HTTP), чтобы читать заголовки доменов
-    mode http
 
-    # Создаем ACL (список доступа) с именем "is_example_local"
-    # Проверяем заголовок 'Host' на соответствие домену 'example.local'
-    # Флаг -i делает проверку нечувствительной к регистру
-    acl is_example_local hdr(host) -i example.local
 
-    # Условие: перенаправлять трафик на группу серверов 'weighted_servers',
-    # ТОЛЬКО ЕСЛИ запрос пришел на домен example.local
-    use_backend weighted_servers if is_example_local
 
-# --- Секция BACKEND (Распределение с весами) ---
-backend weighted_servers
-    # Режим должен совпадать с frontend
-    mode http
-    # Алгоритм Round Robin (с учетом весов)
-    balance roundrobin
 
-    # Настройка серверов с указанными весами (weight)
-    # server1 получит 2 запроса из 9 (вес 2)
-    server s1 192.168.32.129:8002 weight 2 check
-    # server2 получит 3 запроса из 9 (вес 3)
-    server s2 192.168.32.130:8002 weight 3 check
-    # server3 получит 4 запроса из 9 (вес 4)
-    server s3 192.168.32.128:8002 weight 4 check
-```
-- Добавить запись в hosts на каждом сервере:
-```bash
-echo "192.168.32.129 example.local" | sudo tee -a /etc/hosts
-```
-#### Запустим проверку
-```bash
-for i in {1..9}; do curl -H "Host: example.local" http://example.local:8888; done
-```
-<summary>Результат проверки на скриншоте</summary>
-<img src="img/3.jpg" width = 100%>
 
-#### Проверим, что не проходят проверки если обращаться по ip адресу, ACL значит отрабатывает, у нас Пропускать запросы, только если в заголовке написано example.local.
-
-<summary>Результат проверки обращения по ip на скриншоте</summary>
-<img src="img/4.jpg" width = 100%>
-
-<details>
-<summary>Для себя если два сайта(web ресурса)</summary>
-
-- Допустим, у нас есть два разных проекта: example.local и test.local, тогда конфиг будет:
-
-```conf
-frontend http_frontend
-    bind *:8888
-    mode http
-
-    # 1. Определяем ACL для разных доменов
-    acl host_example hdr(host) -i example.local
-    acl host_test    hdr(host) -i test.local
-
-    # 2. Распределяем трафик по разным бэкендам
-    use_backend servers_example if host_example
-    use_backend servers_test    if host_test
-
-# Бэкенд для первого сайта (с весами)
-backend servers_example
-    mode http
-    balance roundrobin
-    server s1 192.168.32.129:8001 weight 2 check
-    server s2 192.168.32.130:8002 weight 3 check
-
-# Бэкенд для второго сайта (совсем другие серверы)
-backend servers_test
-    mode http
-    server s3 192.168.32.128:8003 check
-```
-Как это работает для пользователя:
-
-    Если набрать http://example.local:8888 — попадешь на балансировку между 1 и 2 серверами.
-    Если набрать http://test.local:8888 — попадешь только на 3-й сервер.
-    Если набрать просто IP — HAProxy выдаст ошибку, так как не поймет, какой сайт нужен.
-</details>
 </details>
 
 -------
