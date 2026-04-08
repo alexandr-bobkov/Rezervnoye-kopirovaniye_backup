@@ -27,7 +27,7 @@ rsync -av --delete --checksum --exclude='.*/' ~/ /tmp/backup/
 <summary>Результат проверки команды на скриншоте</summary>
 <img src="img/1.jpg" width = 100%>
 
-~~ Добавим файл `test.txt`  и повторим создание backup~~
+* Добавим файл `test.txt`  и повторим создание backup
 
 <summary>Результат проверки добавление нового созданного файла в backup</summary>
 <img src="img/2.jpg" width = 100%>
