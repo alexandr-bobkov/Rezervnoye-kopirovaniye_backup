@@ -100,7 +100,7 @@ fi
 2. `crontab -e` и добавьте строку:
 
 ```config
-0 3 * * * /bin/bash /home/$(whoami)/backup.sh
+0 3 * * * /bin/bash /home/$(whoami)/Rezervnoye-kopirovaniye_backup/backup.sh
 ```
 
 ### 3. Проверка работоспособности
