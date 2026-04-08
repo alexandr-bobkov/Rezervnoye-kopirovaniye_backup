@@ -171,133 +171,6 @@ rsync -av --progress --bwlimit=125 /home/user/test_file.img  user@192.168.32.130
 <summary>Смотрим размер файла на втором сервере после завершения синхронизации</summary>
 <img src="img/6.jpg" width = 100%>
 
-
-
-
-
- 
-
-
-
-
-
-
-
-
-
-- Для имитации трех бэкенд-серверов были созданы директории с уникальными файлами `index.html`. Серверы запущены на портах 8006
-
-
-**Команды запуска:**
-```bash
-# Подготовка файлов на сервере s1 (192.168.32.129) и s2 (192.168.32.130)
-
-#### На сервере s1
-mkdir -p /home/user/s1
-#### На сервере s2
-mkdir -p /home/user/s2
-#### На сервере s1
-echo "<h1>SERVER 1</h1>" > /home/user/s1/index.html
-#### На сервере s2
-echo "<h1>SERVER 2</h1>" > /home/user/s2/index.html
-# Запуск серверов в фоновом режиме
-#### На сервере s1
-cd /home/user/s1 && python3 -m http.server 8002 --bind 0.0.0.0 &
-#### На сервере s2
-cd /home/user/s2 && python3 -m http.server 8002 --bind 0.0.0.0 &
-```
-## 2. Устанавливаем NGINX на хосте 192.168.32.130, HAPRoxy остается на 192.168.32.129
-```bash
-sudo apt install nginx
-```
-- **Создаем каталог по пути /var/www/images и кладем туда картинку с расширением .jpg**
-
-### 3. Вносим изменения в конфигурационный файл NGINX (на 192.168.32.130) ```(/etc/nginx/sites-available/default)```
-
-```conf
-server {
-    # Слушать 80-й порт (стандартный для интернета)
-    listen 80;
-
-    # Имя нашего сайта. Если в браузере введут другое — Nginx может не ответить
-    server_name example.local;
-
-    # --- КАРТИНКИ (.jpg или .jpeg) ---
-    # ~* означает "искать совпадение в тексте ссылки, не обращая внимания на большие/маленькие буквы"
-    # \.(jpg|jpeg)$ — если ссылка заканчивается на .jpg или .jpeg
-    location ~* \.(jpg|jpeg)$ {
-        # Где лежат картинки на жестком диске этого сервера
-        root /var/www/images;
-
-        # Попробовать отдать файл ($uri). Если его нет — выдать ошибку 404
-        try_files $uri =404;
-    }
-
-    # --- ВСЁ ОСТАЛЬНОЕ (кроме картинок) ---
-    # Слэш "/" означает любой другой запрос (текст, главная страница и т.д.)
-    location / {
-        # Переслать запрос на другой сервер, где живет наш HAProxy
-        # IP моего
-        proxy_pass http://192.168.32.129:8888;
-
-        # Передать оригинальное имя сайта (чтобы HAProxy не запутался)
-        proxy_set_header Host $host;
-
-        # Передать реальный IP-адрес пользователя (чтобы сервер видел, кто зашел)
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-```
- 
-## 4. Вносим изменения в конфигурационный файл HAPRoxy (на 192.168.32.129) ```(/etc/haproxy/haproxy.cfg)```
-
-```conf
-# Секция FRONTEND — как мы принимаем запросы от Nginx
-frontend main_frontend
-    # Слушать порт 8888 на всех сетевых интерфейсах (*) этой машины
-    bind *:8888
-    # Работать в режиме HTTP (чтобы понимать команды браузера)
-    mode http
-    # Отправлять всех пришедших в "группу серверов" под названием python_servers
-    default_backend python_servers
-
-# Секция BACKEND — куда мы отправляем запросы дальше
-backend python_servers
-    # Режим тоже HTTP
-    mode http
-    # Алгоритм "по очереди" (одному, второму, одному, второму...)
-    balance roundrobin
-    # Первый наш Python-сервер (он тут же, на этой же машине, порт 8001)
-    # check — проверять, не "упал" ли сервер
-    server s1 192.168.32.129:8002 check
-    # Второй наш Python-сервер (порт 8002)
-    server s2 192.168.32.130:8002 check
-```
-
-## 5. Перезапускаем службы NGINX и HAPRoxy на соответсвующих серверах:
-```bash
-sudo systemctl restart haproxy.service
-sudo systemctl restart nginx
-```
-
-## 6. Проверяем работоспособность:
-
-<summary>Результат проверки на скриншоте</summary>
-<img src="img/9.jpg" width = 100%>
-
-<details>
-<summary>Расшифровка результата на скриншоте</summary>
-
-    Первый запрос (/3.jpg):
-        HTTP/1.1 200 OK и Server: nginx.
-        Вывод: Nginx сам нашел картинку в /var/www/images/ и отдал её. HAProxy в этом не участвовал. Цель достигнута.
-    Второй запрос (/):
-        HTTP/1.1 200 OK и Server: nginx.
-        Вывод: Nginx принял запрос, понял, что это не картинка, и пробросил его на HAProxy (proxy_pass). HAProxy в свою очередь забрал ответ у Python-сервера и вернул его вам через Nginx.
-        Content-Length: 29 — это как раз размер  строки в ранее созданном файле index.hrml (<h1>SERVER X</h1>).
-
-</details>
-
 </details>
 
 ------
@@ -307,87 +180,82 @@ sudo systemctl restart nginx
 <details>
 <summary><c>Задание 4*</c></summary>
 
-- Запустите 4 simple python сервера на разных портах.
-- Первые два сервера будут выдавать страницу index.html вашего сайта example1.local (в файле index.html напишите example1.local)
-- Вторые два сервера будут выдавать страницу index.html вашего сайта example2.local (в файле index.html напишите example2.local)
-- Настройте два бэкенда HAProxy
-- Настройте фронтенд HAProxy так, чтобы в зависимости от запрашиваемого сайта example1.local или example2.local запросы перенаправлялись на разные бэкенды HAProxy
-- На проверку направьте конфигурационный файл HAProxy, скриншоты, демонстрирующие запросы к разным фронтендам и ответам от разных бэкендов.
-
+- Напишите скрипт, который будет производить инкрементное резервное копирование домашней директории пользователя с помощью rsync на другой сервер
+- Скрипт должен удалять старые резервные копии (сохранять только последние 5 штук)
+- Напишите скрипт управления резервными копиями, в нем можно выбрать резервную копию и данные восстановятся к состоянию на момент создания данной резервной копии.
+- На проверку направьте скрипт и скриншоты, демонстрирующие его работу в различных сценариях.
 
 ------
 ### ОТВЕТ:
 
-## 1.  Подготовка 4 серверов
+## 1.  Для решения задачи по инерементному копированию  будем использовать механизм hard links в rsync (флаг --link-dest). Это позволяет каждой копии выглядеть как полная, но занимать место только для измененных файлов.
 
-- Создаю 4 папки и запускаю серверы. Использую порты 8001-8004. Порты 8001 и 8002 буду использовать на сервере с HAPRoxy чтобы не разворачивать 4 виртуальную машину
+- Сам скрипт:
 
-
-##### На сервере s1 на котором HAPRoxy (192.168.32.129) создаю 2 каталога и внутри файлы index.html с содержимым:
 ```bash
-mkdir -p ~/site1_1 ~/site1_2
-echo "<h1>Welcome to example1.local (Server 1)</h1>" > ~/site1_s1/index.html
-echo "<h1>Welcome to example1.local (Server 2)</h1>" > ~/site1_s2/index.html
-111
+#!/bin/bash
+
+# --- НАСТРОЙКИ ---
+SOURCE="$HOME/"
+REMOTE_USER="user" # Под каким пользователем
+REMOTE_HOST="192.168.32.130"  # IP принимающей стороны
+BACKUP_ROOT="/tmp/backups"
+TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
+CURRENT_BACKUP="$BACKUP_ROOT/$TIMESTAMP"
+LATEST_LINK="$BACKUP_ROOT/latest"
+
+echo "--- Старт инкрементного бэкапа: $TIMESTAMP ---"
+
+# 1. Подготовка структуры на сервере
+ssh $REMOTE_USER@$REMOTE_HOST "mkdir -p $BACKUP_ROOT"
+
+# 2. Запуск rsync
+# Ссылка ../latest ищется относительно создаваемой папки бэкапа
+if rsync -avz --delete --exclude='.*/' \
+      --link-dest="../latest" \
+      "$SOURCE" "$REMOTE_USER@$REMOTE_HOST:$CURRENT_BACKUP"; then
+    
+    echo "[OK] Данные переданы успешно."
+    
+    # 3. Обновление ссылки и ротация через алфавитную сортировку
+    ssh $REMOTE_USER@$REMOTE_HOST "
+        cd $BACKUP_ROOT
+        
+        # Находим самую новую папку (последняя в алфавитном списке)
+        ACTUAL_NEWEST=\$(ls -1 | grep '^20' | sort | tail -n 1)
+        
+        if [ -n \"\$ACTUAL_NEWEST\" ]; then
+            ln -snf \"\$ACTUAL_NEWEST\" latest
+            echo \"Ссылка latest теперь указывает на: \$ACTUAL_NEWEST\"
+        fi
+        
+        # Ротация: сортируем от новых к старым и удаляем всё после 5-й
+        OLD_BACKUPS=\$(ls -1 | grep '^20' | sort -r | tail -n +6)
+        
+        if [ -n \"\$OLD_BACKUPS\" ]; then
+            echo \"Удаляю лишние копии: \$OLD_BACKUPS\"
+            rm -rf \$OLD_BACKUPS
+        else
+            echo \"В хранилище 5 или менее копий. Удаление не требуется.\"
+        fi
+    "
+else
+    echo "[ERROR] Ошибка rsync! Ссылка latest не обновлена."
+    exit 1
+fi
+
+echo "--- Завершено ---"
+
 ```
+* **Отработка скрипта**
 
-##### На сервере s1 запускаю python сервер на портах 8001 и 8002
-```bash
-cd ~/site1_s1 && python3 -m http.server 8001 --bind 0.0.0.0 &
-cd ~/site1_s2 && python3 -m http.server 8002 --bind 0.0.0.0 &
-```
+<summary>Результат отработки скрипта</summary>
+<img src="img/7.jpg" width = 100%>
 
-##### На сервере s2 (192.168.32.130) создаю 1 каталог и внутри файлы index.html с содержимым:
-```bash
-mkdir -p ~/site2_s3
-echo "<h1>Welcome to example2.local (Server 3)</h1>" > ~/site2_s3/index.html
-```
-##### На сервере s2 запускаю python сервер на порту 8003
-```bash
-cd ~/site2_s3 && python3 -m http.server 8003 --bind 0.0.0.0 &
-```
-##### На сервере s3 (192.168.32.128) создаю 1 каталог и внутри файлы index.html с содержимым:
-```bash
-mkdir -p ~/site2_s4
-echo "<h1>Welcome to example2.local (Server 4)</h1>" > ~/site2_s4/index.html
-```
+<summary>Ротация на принмающем сервере</summary>
+<img src="img/8.jpg" width = 100%>
+<img src="img/9.jpg" width = 100%>
 
-##### На сервере s3 запускаю python сервер на порту 8004
-```bash
-cd ~/site2_s4 && python3 -m http.server 8004 --bind 0.0.0.0 &
-```
-
-## 2. Конфигурация HAProxy (на  S1)(192.168.32.129)
-```conf
-frontend main_frontend
-    bind *:8888
-    mode http
-
-    # Настраиваем ACL для разделения по доменам
-    acl is_site1 base_dom example1.local
-    acl is_site2 base_dom example2.local
-    # Перенаправляем на нужные бэкенды
-    use_backend backend_site1 if is_site1
-    use_backend backend_site2 if is_site2
-
-# Бэкенд для example1.local (оба сервера на этой же машине)
-backend backend_site1
-    mode http
-    balance roundrobin
-    server s1 192.168.32.129:8001 check
-    server s2 192.168.32.129:8002 check
-
-# Бэкенд для example2.local (серверы на удаленных машинах)
-backend backend_site2
-    mode http
-    balance roundrobin
-    server s3 192.168.32.130:8003 check
-    server s4 192.168.32.128:8004 check
-```
-
-## 3. Результат проверки
-<summary>Результат проверки  на скриншоте</summary>
-<img src="img/10.jpg" width = 100%>
 
 
 
